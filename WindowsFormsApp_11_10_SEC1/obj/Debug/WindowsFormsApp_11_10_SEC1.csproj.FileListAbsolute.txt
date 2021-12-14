@@ -1,0 +1,10 @@
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\bin\Debug\WindowsFormsApp_11_10_SEC1.exe.config
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\bin\Debug\WindowsFormsApp_11_10_SEC1.exe
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\bin\Debug\WindowsFormsApp_11_10_SEC1.pdb
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\obj\Debug\WindowsFormsApp_11_10_SEC1.csproj.AssemblyReference.cache
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\obj\Debug\WindowsFormsApp_11_10_SEC1.Form1.resources
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\obj\Debug\WindowsFormsApp_11_10_SEC1.Properties.Resources.resources
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\obj\Debug\WindowsFormsApp_11_10_SEC1.csproj.GenerateResource.cache
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\obj\Debug\WindowsFormsApp_11_10_SEC1.csproj.CoreCompileInputs.cache
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\obj\Debug\WindowsFormsApp_11_10_SEC1.exe
+C:\Users\jdkin\source\repos\WindowsFormsApp_11_10_SEC1\obj\Debug\WindowsFormsApp_11_10_SEC1.pdb
