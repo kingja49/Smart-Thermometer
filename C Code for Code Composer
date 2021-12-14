@@ -1,0 +1,278 @@
+#include <msp430g2553.h>
+
+
+#define TRIG_PIN BIT1 // Corresponds to P2.1 (18)
+#define ECHO_PIN BIT1 // Corresponds to P1.1 (17)
+volatile unsigned long distance, start_time, end_time, delta_time;
+volatile long temp, tempRaw, lightRaw;
+void temperature();
+void photo();
+void reset();
+void range();
+int count = 0;
+
+
+char result[100];
+volatile long sample[100];
+void uart_init(void);
+void ConfigClocks(void);
+void strreverse(char* begin, char* end);
+void itoa(int value, char* str, int base);
+void port_init();
+
+void reset_timer();
+void wait_ms();
+
+
+void main(void)
+{
+    WDTCTL = WDTPW + WDTHOLD;
+
+    port_init();
+
+    ConfigClocks();
+    uart_init();
+
+    P1DIR &= ~ECHO_PIN;
+    P1SEL |= ECHO_PIN;
+    P2DIR |= TRIG_PIN;
+    P2OUT &= ~TRIG_PIN;
+    P1DIR |= BIT0;
+    P1OUT &= ~BIT0;
+    BCSCTL1 = CALBC1_1MHZ; // Set range
+    DCOCTL = CALDCO_1MHZ;
+    BCSCTL2 &= ~(DIVS_3); // SMCLK = DCO = 1MHz
+    TACTL = MC_0;
+    CCTL0 |= CM_3 + SCS + CCIS_0 + CAP + CCIE;
+    TACTL |= TASSEL_2 + MC_2 + ID_0;
+    __enable_interrupt();
+    __delay_cycles(5);
+
+
+    P2DIR |= BIT5;
+    P2OUT = 0x00;
+
+
+    while(1){
+
+
+         reset();
+         photo();
+         ADC10CTL0 |= ENC + ADC10SC +MSC;       // Converter Enable, Sampling/conversion start
+         while((ADC10CTL0 & ADC10IFG) == 0);    // check the Flag, while its low just wait
+         __delay_cycles(100);
+         lightRaw = ADC10MEM;
+         ADC10CTL0 &= ~ADC10IFG;                // clear the flag
+         __delay_cycles(2000);
+
+
+        reset();
+        reset_timer();
+        P2OUT |= TRIG_PIN;
+        __delay_cycles(10);
+        P2OUT &= ~TRIG_PIN;
+        wait_ms(200);
+
+
+
+         if (count == 0) {
+
+             P2OUT = ~BIT5;                     //When the count is 0 (meaning the code exists the if statement below) turn off the LED
+
+         }
+
+//         if (distance > 1000000 || count > 0 || lightRaw > 500)   //  Use this if statement if you want to use the motion sensor but not communicate with ThingSpeak
+         if (count > 0 || lightRaw > 500)                           //  Use this if statement if you want to communicate with thingspeak but not use the Motion Sensor.
+
+         {
+                     count = count + 1;                             //Increment the counter
+                     P2OUT = BIT5;                                  //Turn on the LED for the entirety that this if statement is active
+
+                     reset();
+                     temperature();                                 //External temperature sensor
+                     ADC10CTL0 |= ENC + ADC10SC +MSC;               // Converter Enable, Sampling/conversion start
+                     while((ADC10CTL0 & ADC10IFG) == 0);            // check the Flag, while its low just wait
+                     __delay_cycles(20000000);                      //Wait, this is needed to slow the code down so that the Serial Display can keep up
+                     tempRaw = ADC10MEM;                            //Read the Raw temperature value
+                     temp = (((tempRaw+175)*4)/100);                //Convert the temperature value to degrees C
+                     itoa((temp),result,10);                        //Convert the temperature into a format compatable with the serial monitor
+                     ADC10CTL0 &= ~ADC10IFG;                        // clear the flag
+                     __delay_cycles(2000000);                       //Wait, this is needed to slow the code down so that the Serial Display can keep up    
+
+
+
+                      if (count == 10) {
+                          count = 0;
+
+                      }
+
+                      int acount = 0;
+
+                      while(result[acount]!='\0')
+                      {
+                          while((IFG2 & UCA0TXIFG)==0);             //Wait Unitl the UART transmitter is ready
+                          __delay_cycles(2000000);                  //Wait, this is needed to slow the code down so that the Serial Display can keep up
+                          UCA0TXBUF = result[acount++] ;            //Transmit the received data.
+
+
+                      }
+//                      __delay_cycles(2000000);                      //Wait, this is needed to slow the code down so that the Serial Display can keep up
+
+        }
+
+
+        }
+    }
+
+// Configure the external Temperature sensor
+void temperature(){
+
+     ADC10CTL1 = INCH_4 + ADC10DIV_0 + CONSEQ_2; //inch4 selects A4
+     ADC10CTL0 = SREF_1 | ADC10SHT_3 | REFON | ADC10ON;//Vref+, Vss, 64 ATD clocks per sample, internal references, turn ADCON
+     ADC10CTL0 |= ENC + ADC10SC +MSC;
+
+
+}
+
+// Configure the external photoresistor
+void photo(){
+
+     ADC10CTL1 = INCH_6 + ADC10DIV_0 + CONSEQ_2; //inch selects A6
+     ADC10CTL0 = SREF_1 | ADC10SHT_3 | REFON | ADC10ON;//Vref+, Vss, 64 ATD clocks per sample, internal references, turn ADCON
+     ADC10CTL0 |= ENC + ADC10SC +MSC;
+
+}
+
+
+//Create function to reset all values of the memory registers
+void reset(){
+    ADC10CTL0 &= ~ADC10IFG;//CLEAR FLAG
+    ADC10MEM=0x00000000;
+    ADC10AE0=0x00;
+    ADC10CTL0=0x0000;
+    ADC10CTL1=0x0000;
+}
+
+//start of the new stuff
+void uart_init(void){
+    UCA0CTL1 |= UCSWRST;                     //Disable the UART state machine
+    UCA0CTL1 |= UCSSEL_3;                    //Select SMCLK as the baud rate generator source
+    UCA0BR1 =0;
+    UCA0BR0 = 104;                           //Produce a 9,600 Baud UART rate
+    UCA0MCTL = 0x02;                         //Chooa propriately from Table 15-4 in User Guide
+    UCA0CTL1 &= ~UCSWRST;                    //Enable the UART state naching
+    IE2 |= UCA0RXIE;                         //Enable the UART receiver Interrupt
+}
+void ConfigClocks(void)
+ {
+
+  BCSCTL1 = CALBC1_1MHZ;                     // Set range
+  DCOCTL = CALDCO_1MHZ;                      // Set DCO step + modulation
+  BCSCTL3 |= LFXT1S_2;                       // LFXT1 = VLO
+  IFG1 &= ~OFIFG;                            // Clear OSCFault flag
+  BCSCTL2 = 0;                               // MCLK = DCO = SMCLK
+ }
+
+void strreverse(char* begin, char* end)      // Function to reverse the order of the ASCII char array elements
+{
+    char aux;
+    while(end>begin)
+        aux=*end, *end--=*begin, *begin++=aux;
+}
+
+void itoa(int value, char* str, int base) {  //Function to convert the signed int to an ASCII char array
+
+    static char num[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+    char* wstr=str;
+    int sign;
+
+    // Validate that base is between 2 and 35 (inlcusive)
+    if (base<2 || base>35){
+        *wstr='\0';
+        return;
+    }
+
+    // Get magnitude and th value
+    sign=value;
+    if (sign < 0)
+        value = -value;
+
+    do // Perform interger-to-string conversion.
+        *wstr++ = num[value%base]; //create the next number in converse by taking the modolus
+    while(value/=base);  // stop when you get  a 0 for the quotient
+
+    if(sign<0) //attch sign character, if needed
+        *wstr++='-';
+    *wstr='\0'; //Attach a null character at end of char array. The string is in revers order at this point
+    strreverse(str,wstr-1); // Reverse string
+
+}
+
+
+
+
+void port_init(){
+    P1SEL |= BIT1 + BIT2;            // select non-GPIO  usage for Pins 1 and 2
+    P1SEL2 |= BIT1 + BIT2;           // Select UART usage of Pins 1 and 2
+}
+
+#if defined(__TI_COMPILER_VERSION__)
+
+#pragma vector = TIMER0_A0_VECTOR
+
+__interrupt void ta1_isr(void)
+
+#else
+
+void __attribute__((interrupt(TIMER0_A0_VECTOR))) ta1_isr(void)
+
+#endif
+
+{
+    switch (TAIV)
+    {
+    case 10:
+
+        break;
+    default:
+        if (CCTL0 & CCI)
+        {
+            start_time = CCR0;
+        } // If ECHO is LOW then stop counting (falling edge)
+        else
+        {
+            end_time = CCR0;
+            delta_time = end_time - start_time;
+            distance = (unsigned long)(delta_time / 0.00583090379);
+
+            if (distance / 10000 >= 2.0 && distance / 10000 <= 10)
+            {
+                P1OUT |= BIT0;
+                        }
+            else
+                P1OUT &= ~BIT0;
+        }
+        break;
+    }
+    TACTL &= ~CCIFG; // reset the interrupt flag
+
+}
+
+void reset_timer(void)
+
+{
+    TACTL |= TACLR;
+}
+
+void wait_ms(unsigned int ms) {
+
+    unsigned int i;
+
+    for (i = 0; i <= ms; i++)
+    {
+        __delay_cycles(1000);
+    }
+}
+
+
+
